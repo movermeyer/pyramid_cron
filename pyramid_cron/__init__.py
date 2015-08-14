@@ -2,7 +2,7 @@ from __future__ import absolute_import, print_function, division
 
 import logging
 import socket
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import six
 
@@ -13,7 +13,7 @@ __version__ = '0.1.1.dev'
 
 class Task(object):
 
-    def __init__(self, f, min, hour, day, month, dow):
+    def __init__(self, f, min, hour, day, month, dow, idle):
         self.f = f
 
         class Wildcard(set):
@@ -38,6 +38,8 @@ class Task(object):
         self.month = conv(month)
         self.dow = conv(dow)
 
+        self.idle = idle
+
     def check(self, t):
         return ((t.minute in self.min) and
                 (t.hour in self.hour) and
@@ -45,13 +47,15 @@ class Task(object):
                 (t.month in self.month) and
                 (t.weekday() in self.dow))
 
-    def go(self, request):
+    def go(self, request, run_start):
         log.info("%s start", self.f.__name__)
-        self.f(dict(request=request, registry=request.registry))
+        def time_left():
+            return (run_start + datetime.timedelta(seconds=60)) - datetime.now()
+        self.f(dict(request=request, registry=request.registry, time_left=time_left))
         log.info("%s end", self.f.__name__)
 
 
-def add_cron_task(config, f, min='*', hour='*', day='*', month='*', dow='*'):
+def add_cron_task(config, f, min='*', hour='*', day='*', month='*', dow='*', idle=False):
     """
     Register a function for execution by the scheduler.
 
@@ -60,10 +64,15 @@ def add_cron_task(config, f, min='*', hour='*', day='*', month='*', dow='*'):
         def mytask(system):
             request = system['request']
             registry = system['registry']
+            time_left = system['time_left']
             # do stuff
 
     Additional keys may be added in the future: the single-arg signature
     ensures that task functions will be forward-compatible.
+
+    The ``time_left`` member is a no-parameter function that returns how many
+    seconds are remaining in the allotted 60 seconds of the current cron run.
+    When the 60 seconds is exceeded, the returned value will be negative.
 
     In addition to the callback function, you can specify a schedule, using a
     cron-like syntax. For the time periods of ``min``, ``hour``, ``day``,
@@ -102,12 +111,17 @@ def add_cron_task(config, f, min='*', hour='*', day='*', month='*', dow='*'):
 
     :param dow:
         Specify which days of the week to run the task.
+
+    :param idle:
+        If true, executes the task after all non-idle tasks have completed, and
+        only when there is time remaining in the 60 second window since the
+        cron view was triggered.
     """
     def register():
         registry = config.registry
         registry.setdefault('cron_tasks', [])
         registry['cron_tasks'].append(Task(f, min=min, hour=hour, day=day,
-                                           month=month, dow=dow))
+                                           month=month, dow=dow, idle=idle))
     # This discriminator prevents a task from being registered twice.
     config.action(('cron_task', f), register)
 
@@ -128,11 +142,16 @@ class CronView(object):
         if request.remote_addr in allowed:
             registry = request.registry
             # This intentionally uses localtime, not UTC.
-            t = datetime.now()
+            start = datetime.now()
             log.warn('begin cron run')
-            for task in registry['cron_tasks']:
-                if task.check(t):
-                    task.go(request)
+            for task in [ t for t in registry['cron_tasks'] if not t.idle ]:
+                if task.check(start):
+                    task.go(request, start)
+            for task in [ t for t in registry['cron_tasks'] if t.idle ]:
+                if datetime.now() - start >= timedelta(seconds=60):
+                    break
+                if task.check(start):
+                    task.go(request, start)
             log.warn('end cron run')
             return 'ok'
         else:
