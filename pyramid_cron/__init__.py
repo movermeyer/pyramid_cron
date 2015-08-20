@@ -50,7 +50,7 @@ class Task(object):
     def go(self, request, run_start):
         log.info("%s start", self.f.__name__)
         def time_left():
-            return (run_start + timedelta(seconds=60)) - datetime.now()
+            return ((run_start + timedelta(seconds=60)) - datetime.now()).total_seconds
         self.f(dict(request=request, registry=request.registry, time_left=time_left))
         log.info("%s end", self.f.__name__)
 
