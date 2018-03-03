@@ -5,9 +5,9 @@ pyramid_cron - Simple scheduled tasks for Pyramid
     :target: http://travis-ci.org/storborg/pyramid_cron
 .. image:: https://coveralls.io/repos/storborg/pyramid_cron/badge.png?branch=master
     :target: https://coveralls.io/r/storborg/pyramid_cron
-.. image:: https://pypip.in/v/pyramid_cron/badge.png
+.. image:: https://img.shields.io/pypi/v/pyramid_cron.svg
     :target: https://crate.io/packages/pyramid_cron
-.. image:: https://pypip.in/d/pyramid_cron/badge.png
+.. image:: https://img.shields.io/pypi/dm/pyramid_cron.svg
     :target: https://crate.io/packages/pyramid_cron
 
 Scott Torborg - `Cart Logic <http://www.cartlogic.com>`_
